@@ -1,0 +1,46 @@
+FROM golang:1.19-alpine AS builder
+
+# Install build dependencies
+RUN apk add --no-cache \
+    git \
+    make
+
+# Clone wings repository
+RUN git clone https://github.com/pelican-dev/wings.git /wings
+WORKDIR /wings
+RUN git checkout release/v1.0.0-beta14
+
+# Build wings
+RUN go mod download
+RUN go build -o /usr/local/bin/wings
+
+# Final image
+FROM alpine:3.16
+
+# Install runtime dependencies
+RUN apk add --no-cache \
+    docker-cli \
+    docker-compose \
+    tzdata \
+    ca-certificates
+
+# Copy built binary from builder
+COPY --from=builder /usr/local/bin/wings /usr/local/bin/wings
+
+# Create necessary directories
+RUN mkdir -p /etc/pelican \
+    /var/lib/pelican \
+    /var/log/pelican \
+    /tmp/pelican
+
+# Copy configuration
+COPY .env.wings /etc/pelican/.env
+
+# Set working directory
+WORKDIR /var/lib/pelican
+
+# Expose necessary ports
+EXPOSE 2022 8080 2023
+
+# Start wings
+CMD ["wings", "--config", "/etc/pelican/config.yml"]

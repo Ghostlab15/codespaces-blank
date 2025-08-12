@@ -1,0 +1,72 @@
+version: '3.8'
+
+services:
+  db:
+    image: mariadb:10.6
+    restart: always
+    environment:
+      MYSQL_DATABASE: pelican
+      MYSQL_USER: pelican
+      MYSQL_PASSWORD: your_secure_password
+      MYSQL_ROOT_PASSWORD: your_secure_root_password
+    volumes:
+      - db_data:/var/lib/mysql
+    networks:
+      - pelican_network
+
+  redis:
+    image: redis:alpine
+    restart: always
+    networks:
+      - pelican_network
+
+  panel:
+    build:
+      context: .
+      dockerfile: Dockerfile.panel
+    restart: always
+    depends_on:
+      - db
+      - redis
+    ports:
+      - "8000:80"
+    volumes:
+      - panel_data:/var/www
+      - panel_logs:/var/log
+    environment:
+      - DB_HOST=db
+      - DB_PASSWORD=your_secure_password
+      - REDIS_HOST=redis
+    networks:
+      - pelican_network
+
+  wings:
+    build:
+      context: .
+      dockerfile: Dockerfile.wings
+    restart: always
+    depends_on:
+      - panel
+    privileged: true
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - /var/lib/docker/containers:/var/lib/docker/containers
+      - wings_data:/var/lib/pelican
+      - wings_logs:/var/log/pelican
+      - /etc/pelican:/etc/pelican
+    environment:
+      - WINGS_PANEL_URL=http://panel
+      - WINGS_TOKEN=your_wings_token
+    networks:
+      - pelican_network
+
+volumes:
+  db_data:
+  panel_data:
+  panel_logs:
+  wings_data:
+  wings_logs:
+
+networks:
+  pelican_network:
+    driver: bridge
