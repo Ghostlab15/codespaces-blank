@@ -1,0 +1,53 @@
+cat > Dockerfile.panel << 'EOL'
+FROM php:8.1-fpm
+
+# Install system dependencies
+RUN apt-get update && apt-get install -y \
+    git \
+    curl \
+    libpng-dev \
+    libonig-dev \
+    libxml2-dev \
+    zip \
+    unzip \
+    supervisor \
+    nginx
+
+# Clear cache
+RUN apt-get clean && rm -rf /var/lib/apt/lists/*
+
+# Install PHP extensions
+RUN docker-php-ext-install pdo_mysql mbstring exif pcntl bcmath gd
+
+# Install Composer
+COPY --from=composer:latest /usr/bin/composer /usr/bin/composer
+
+# Set working directory
+WORKDIR /var/www
+
+# Clone the panel
+RUN git clone https://github.com/pelican-dev/panel.git .
+RUN git checkout release/v1.0.0-beta22
+
+# Install PHP dependencies
+RUN composer install --no-dev --optimize-autoloader
+
+# Set up storage and cache directories
+RUN mkdir -p storage/framework/{sessions,views,cache}
+RUN chmod -R 775 storage
+
+# Copy configuration
+COPY .env.panel .env
+
+# Generate application key
+RUN php artisan key:generate
+
+# Set up supervisor
+COPY supervisord.conf /etc/supervisor/conf.d/supervisord.conf
+
+# Expose port 80
+EXPOSE 80
+
+# Start supervisor
+CMD ["/usr/bin/supervisord", "-c", "/etc/supervisor/conf.d/supervisord.conf"]
+EOL
